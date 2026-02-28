@@ -4,19 +4,33 @@ import User from "@/models/user";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
+interface ClerkUserData {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email_addresses: { email_address: string }[];
+  image_url: string;
+}
+
+interface ClerkWebhookEvent {
+  data: ClerkUserData;
+  type: string;
+}
+
 export async function POST(req: Request) {
   const wh = new Webhook(process.env.SVIX_SECRET!);
   const headerPayload = await headers();
   const svixHeaders = {
-    "svix-id": headerPayload.get("svix-id"),
-    "svix-signature": headerPayload.get("svix-signature"),
+    "svix-id": headerPayload.get("svix-id") as string,
+    "svix-timestamp": headerPayload.get("svix-timestamp") as string,
+    "svix-signature": headerPayload.get("svix-signature") as string,
   };
 
   // Get the payload and verify it
 
   const payload = await req.text();
   const body = JSON.stringify(payload);
-  const { data, type } = wh.verify(body, svixHeaders);
+  const { data, type } = wh.verify(body, svixHeaders) as ClerkWebhookEvent;
 
   // Prepare the user data to be stored in the database
   const userData = {
