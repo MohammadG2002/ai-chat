@@ -18,7 +18,7 @@ interface ClerkWebhookEvent {
 }
 
 export async function POST(req: Request) {
-  const wh = new Webhook(process.env.SVIX_SECRET!);
+  const wh = new Webhook(process.env.SVIX_KEY!);
   const headerPayload = await headers();
   const svixHeaders = {
     "svix-id": headerPayload.get("svix-id") as string,
