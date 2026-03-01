@@ -18,7 +18,10 @@ interface ClerkWebhookEvent {
 }
 
 export async function POST(req: Request) {
+  console.log("Received Clerk webhook POST");
+  // initialize webhook verifier using the key from .env (SVIX_KEY)
   const wh = new Webhook(process.env.SVIX_KEY!);
+
   const headerPayload = await headers();
   const svixHeaders = {
     "svix-id": headerPayload.get("svix-id") as string,
@@ -26,33 +29,61 @@ export async function POST(req: Request) {
     "svix-signature": headerPayload.get("svix-signature") as string,
   };
 
-  // Get the payload and verify it
-
+  // Get the raw body
   const payload = await req.text();
-  const body = JSON.stringify(payload);
-  const { data, type } = wh.verify(body, svixHeaders) as ClerkWebhookEvent;
+  let data: ClerkUserData;
+  let type: string;
 
-  // Prepare the user data to be stored in the database
+  try {
+    ({ data, type } = wh.verify(payload, svixHeaders) as ClerkWebhookEvent);
+  } catch (err) {
+    console.error("Svix webhook verification failed:", err);
+    return NextResponse.json(
+      { error: "Invalid webhook signature" },
+      { status: 400 },
+    );
+  }
+
   const userData = {
     _id: data.id,
     name: `${data.first_name} ${data.last_name}`,
-    email: data.email_addresses[0].email_address,
+    email: data.email_addresses[0]?.email_address || "",
     image: data.image_url,
   };
 
-  await connectDB();
-  switch (type) {
-    case "user.created":
-      await User.create(userData);
-      break;
-    case "user.updated":
-      await User.findByIdAndUpdate(data.id, userData);
-      break;
-    case "user.deleted":
-      await User.findByIdAndDelete(data.id);
-      break;
-    default:
-      break;
+  try {
+    const db = await connectDB();
+    console.log("MongoDB connected", !!db);
+  } catch (dbErr) {
+    console.error("Failed to connect to MongoDB", dbErr);
+    return NextResponse.json(
+      { error: "DB connection failure" },
+      { status: 500 },
+    );
   }
+
+  try {
+    switch (type) {
+      case "user.created":
+        console.log("Creating user", userData._id);
+        await User.create(userData);
+        break;
+      case "user.updated":
+        console.log("Updating user", userData._id);
+        await User.findByIdAndUpdate(data.id, userData);
+        break;
+      case "user.deleted":
+        console.log("Deleting user", userData._id);
+        await User.findByIdAndDelete(data.id);
+        break;
+      default:
+        console.warn("Unhandled webhook type", type);
+        break;
+    }
+  } catch (e) {
+    console.error("Database operation failed for type", type, e);
+    return NextResponse.json({ error: "DB operation failed" }, { status: 500 });
+  }
+
   return NextResponse.json({ message: "Webhook received" });
 }
