@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { Webhook } from "svix";
 import connectDB from "@/config/db";
 import User from "@/models/user";
@@ -51,6 +53,8 @@ export async function POST(req: Request) {
     image: data.image_url,
   };
 
+  console.log("Webhook event type", type, "userData", userData);
+
   try {
     const db = await connectDB();
     console.log("MongoDB connected", !!db);
@@ -66,7 +70,8 @@ export async function POST(req: Request) {
     switch (type) {
       case "user.created":
         console.log("Creating user", userData._id);
-        await User.create(userData);
+        const created = await User.create(userData);
+        console.log("Created record:", created);
         break;
       case "user.updated":
         console.log("Updating user", userData._id);
